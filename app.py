@@ -63,14 +63,21 @@ def build_graph(df: pd.DataFrame) -> nx.DiGraph:
     Construct a directed graph from the transaction DataFrame.
 
     Each unique account (sender or receiver) becomes a node.
-    Each transaction becomes a directed edge.
+    Each transaction becomes a directed edge with amount and timestamp attributes.
 
     Time complexity: O(E) where E = number of transaction rows.
     Uses vectorized edge construction instead of iterrows for speed.
     """
     G = nx.DiGraph()
-    edges = list(zip(df["sender_id"], df["receiver_id"]))
-    G.add_edges_from(edges)
+    for _, row in df.iterrows():
+        sender, receiver, amount = row["sender_id"], row["receiver_id"], row["amount"]
+        ts = row["timestamp"]
+        if G.has_edge(sender, receiver):
+            # Multiple transactions on same edge: accumulate amounts, append timestamps
+            G[sender][receiver]["amounts"].append(amount)
+            G[sender][receiver]["timestamps"].append(ts)
+        else:
+            G.add_edge(sender, receiver, amounts=[amount], timestamps=[ts])
     return G
 
 
@@ -115,9 +122,16 @@ def _find_short_cycles_local(G, node, length_bound=5):
     return cycles
 
 
-def detect_cycles(G: nx.DiGraph) -> list[list[str]]:
+def detect_cycles(G: nx.DiGraph) -> tuple[list[list[str]], dict[str, float]]:
     """
-    Find simple cycles of length 3, 4, or 5.
+    Find simple cycles of length 3, 4, or 5 and compute continuous risk scores.
+
+    For each cycle, compute:
+      cycle_time = max(timestamp_of_edges) - min(timestamp_of_edges)
+      flow_loss = abs(total_in_amt - total_out_amt) / max(total_in_amt, 1)
+      cycle_risk = (6 - len(cycle)) * 10
+                 + (86400 - cycle_time_seconds) / 3600
+                 + (1 - flow_loss) * 20
 
     Hybrid strategy for guaranteed sub-second performance:
 
@@ -134,7 +148,9 @@ def detect_cycles(G: nx.DiGraph) -> list[list[str]]:
       5. Global deduplication via frozenset to avoid reporting the
          same cycle found from different starting nodes.
 
-    Returns a list of cycles, each cycle being a list of account IDs.
+    Returns (cycles, cycle_score) where:
+      - cycles: list of cycles, each cycle being a list of account IDs
+      - cycle_score: dict mapping account ID → continuous risk score
     """
     import time as _time
     t_start = _time.perf_counter()
@@ -153,9 +169,10 @@ def detect_cycles(G: nx.DiGraph) -> list[list[str]]:
             changed = True
 
     if pruned.number_of_nodes() == 0:
-        return []
+        return [], {}
 
     cycles = []
+    cycle_score: dict[str, float] = defaultdict(float)
     seen = set()  # frozensets for dedup
     budget = _MAX_CYCLES
 
@@ -165,6 +182,67 @@ def detect_cycles(G: nx.DiGraph) -> list[list[str]]:
         if key not in seen:
             seen.add(key)
             cycles.append(c)
+            
+            # Compute cycle risk score
+            cycle_nodes = list(c)
+            edges_in_cycle = []
+            node_in_amt = defaultdict(float)   # Track incoming amounts per node
+            node_out_amt = defaultdict(float)  # Track outgoing amounts per node
+            
+            for i in range(len(cycle_nodes)):
+                u = cycle_nodes[i]
+                v = cycle_nodes[(i + 1) % len(cycle_nodes)]
+                if pruned.has_edge(u, v):
+                    edge_data = pruned[u][v]
+                    amounts = edge_data.get("amounts", [0])
+                    timestamps = edge_data.get("timestamps", [0])
+                    edge_amount = sum(amounts)
+                    edges_in_cycle.append({
+                        "amounts": amounts,
+                        "timestamps": timestamps
+                    })
+                    # Track flow direction: u sends, v receives
+                    node_out_amt[u] += edge_amount
+                    node_in_amt[v] += edge_amount
+            
+            all_amounts = []
+            all_timestamps = []
+            for e in edges_in_cycle:
+                all_amounts.extend(e.get("amounts", []))
+                all_timestamps.extend(e.get("timestamps", []))
+            
+            if all_timestamps:
+                # Convert timestamps to seconds
+                try:
+                    ts_vals = [pd.Timestamp(ts).timestamp() for ts in all_timestamps]
+                    cycle_time = max(ts_vals) - min(ts_vals)
+                except:
+                    cycle_time = 0
+            else:
+                cycle_time = 0
+            
+            # Compute flow_loss as average balance imbalance across nodes in cycle
+            total_imbalance = 0.0
+            total_in_amt = 0.0
+            for node in cycle_nodes:
+                in_amt = node_in_amt[node]
+                out_amt = node_out_amt[node]
+                total_in_amt += in_amt
+                total_imbalance += abs(in_amt - out_amt)
+            
+            # flow_loss: normalized imbalance (high = money leaking)
+            flow_loss = (total_imbalance / len(cycle_nodes)) / max(total_in_amt, 1) if total_in_amt > 0 else 0
+            
+            cycle_risk = (
+                (6 - len(c)) * 10 +
+                max(0, (86400 - cycle_time) / 3600) +
+                (1 - flow_loss) * 20
+            )
+            
+            # Add to each node in cycle
+            for node in c:
+                cycle_score[str(node)] += cycle_risk
+            
             budget -= 1
 
     # Step 2 & 3/4: process each SCC
@@ -196,7 +274,7 @@ def detect_cycles(G: nx.DiGraph) -> list[list[str]]:
                     if budget <= 0:
                         break
 
-    return cycles
+    return cycles, dict(cycle_score)
 
 
 # ===========================================================================
@@ -215,6 +293,9 @@ def detect_smurfing(df: pd.DataFrame) -> dict:
     int64-nanosecond timestamps with a defaultdict counter for O(1)
     window maintenance.
 
+    For each distinct counterparty count ≥10, compute:
+      fan_intensity = distinct_count / max(window_duration_hours, 1)
+
     Fan-in:  ≥10 distinct senders  → 1 receiver within any 72-hour window.
     Fan-out: 1 sender → ≥10 distinct receivers within any 72-hour window.
 
@@ -231,10 +312,15 @@ def detect_smurfing(df: pd.DataFrame) -> dict:
     Time complexity: O(E log E) for the initial sort + O(E) for the
     sliding-window scan, overall O(E log E).
 
-    Returns {"fan_in_nodes": set, "fan_out_nodes": set}.
+    Returns {
+      "fan_in_nodes": set,
+      "fan_out_nodes": set,
+      "fan_score": dict[str, float]
+    }.
     """
     fan_in_nodes: set[str] = set()
     fan_out_nodes: set[str] = set()
+    fan_score: dict[str, float] = defaultdict(float)
 
     df_sorted = df.sort_values("timestamp")
     ts_int = df_sorted["timestamp"].astype("int64").values  # nanosecond ints
@@ -271,10 +357,14 @@ def detect_smurfing(df: pd.DataFrame) -> dict:
                     distinct -= 1
                 left += 1
 
-            if distinct >= 10:
+            if distinct >= 10 and not flagged:
                 fan_in_nodes.add(receiver)
                 flagged = True
-                break
+                # Compute fan intensity
+                window_duration_ns = ts[right] - ts[left]
+                window_duration_hours = max(window_duration_ns / 1e9 / 3600, 1)
+                fan_intensity = distinct / max(window_duration_hours, 1)
+                fan_score[str(receiver)] += fan_intensity
 
     # --- Fan-out: one sender → many receivers ---
     for sender, idxs in send_groups.items():
@@ -299,20 +389,34 @@ def detect_smurfing(df: pd.DataFrame) -> dict:
 
             if distinct >= 10:
                 fan_out_nodes.add(sender)
+                # Compute fan intensity
+                window_duration_ns = ts[right] - ts[left]
+                window_duration_hours = max(window_duration_ns / 1e9 / 3600, 1)
+                fan_intensity = distinct / max(window_duration_hours, 1)
+                fan_score[str(sender)] += fan_intensity
                 break
 
-    return {"fan_in_nodes": fan_in_nodes, "fan_out_nodes": fan_out_nodes}
+    return {
+        "fan_in_nodes": fan_in_nodes,
+        "fan_out_nodes": fan_out_nodes,
+        "fan_score": dict(fan_score)
+    }
 
 
 # ===========================================================================
 # 4. SHELL NETWORK DETECTION  (chains ≥3 hops, low-activity intermediates)
 # ===========================================================================
 
-def detect_shell_networks(G: nx.DiGraph) -> set[str]:
+def detect_shell_networks(G: nx.DiGraph, df: pd.DataFrame = None) -> dict:
     """
     Identify shell-network nodes: accounts that appear as intermediate hops
     in chains of length ≥3, where each intermediate node has a total degree
     (in + out) of only 2 or 3 transactions.
+
+    For each shell candidate, compute:
+      efficiency = out_amt[node] / max(in_amt[node], 1)
+      latency = avg(outgoing_ts - incoming_ts)
+      shell_risk = efficiency * (1 / max(latency_hours, 1))
 
     Algorithm (optimised DFS chain-walk):
       1. Identify candidate "shell" nodes (degree 2 or 3).
@@ -325,7 +429,10 @@ def detect_shell_networks(G: nx.DiGraph) -> set[str]:
     Time complexity: O(V + E) for degree filtering + O(S * D) where
     S = number of chain-start nodes and D = max depth (6).
 
-    Returns a set of account IDs flagged as shell intermediaries.
+    Returns {
+      "shell_nodes": set,
+      "shell_score": dict[str, float]
+    }.
     """
     shell_candidates = set()
     for node in G.nodes():
@@ -334,10 +441,11 @@ def detect_shell_networks(G: nx.DiGraph) -> set[str]:
             shell_candidates.add(node)
 
     if not shell_candidates:
-        return set()
+        return {"shell_nodes": set(), "shell_score": {}}
 
     sub = G.subgraph(shell_candidates)
     shell_nodes: set[str] = set()
+    shell_score: dict[str, float] = defaultdict(float)
 
     # DFS chain walk from each candidate (only start from sources or
     # nodes whose predecessors are NOT in the subgraph, to avoid
@@ -360,17 +468,54 @@ def detect_shell_networks(G: nx.DiGraph) -> set[str]:
     for start in starts:
         _dfs(start, [start], {start})
 
-    return shell_nodes
+    # Compute shell risk scores if dataframe is provided
+    if df is not None:
+        for node in shell_nodes:
+            # Incoming transactions
+            incoming = df[df["receiver_id"] == node]
+            in_amt = incoming["amount"].sum()
+
+            # Outgoing transactions
+            outgoing = df[df["sender_id"] == node]
+            out_amt = outgoing["amount"].sum()
+
+            efficiency = out_amt / max(in_amt, 1)
+
+            # Compute latency: avg(outgoing_ts - incoming_ts)
+            latencies = []
+            for _, in_row in incoming.iterrows():
+                in_ts = pd.Timestamp(in_row["timestamp"]).timestamp()
+                for _, out_row in outgoing.iterrows():
+                    out_ts = pd.Timestamp(out_row["timestamp"]).timestamp()
+                    latency = out_ts - in_ts
+                    if latency >= 0:  # Only count positive latencies
+                        latencies.append(latency)
+
+            if latencies:
+                avg_latency_hours = np.mean(latencies) / 3600
+            else:
+                avg_latency_hours = 1
+
+            shell_risk = efficiency * (1 / max(avg_latency_hours, 1))
+            shell_score[str(node)] += shell_risk
+
+    return {
+        "shell_nodes": shell_nodes,
+        "shell_score": dict(shell_score)
+    }
 
 
 # ===========================================================================
 # 5. HIGH VELOCITY CHECK  (int64 sliding window)
 # ===========================================================================
 
-def detect_high_velocity(df: pd.DataFrame) -> set[str]:
+def detect_high_velocity(df: pd.DataFrame) -> dict:
     """
     Flag accounts with >10 transactions (sent or received) within any
     24-hour window.
+
+    For each high-velocity account, compute:
+      txn_rate = num_txns / max(active_hours, 1)
 
     Optimisation: uses pre-computed int64 nanosecond timestamps for
     integer comparison instead of constructing pd.Timestamp objects
@@ -379,9 +524,14 @@ def detect_high_velocity(df: pd.DataFrame) -> set[str]:
     Time complexity: O(E log E) for sorting + O(E) for the sliding-window
     scan per account.
 
-    Returns a set of high-velocity account IDs.
+    Returns {
+      "high_vel_accounts": set,
+      "velocity_score": dict[str, float]
+    }.
     """
     high_vel: set[str] = set()
+    velocity_score: dict[str, float] = defaultdict(float)
+
     df_sorted = df.sort_values("timestamp")
     ts_int = df_sorted["timestamp"].astype("int64").values
 
@@ -398,9 +548,18 @@ def detect_high_velocity(df: pd.DataFrame) -> set[str]:
                     left += 1
                 if (right - left + 1) > 10:
                     high_vel.add(account)
+                    # Compute transaction rate
+                    window_duration_ns = ts[right] - ts[left]
+                    window_duration_hours = max(window_duration_ns / 1e9 / 3600, 1)
+                    txn_count = right - left + 1
+                    txn_rate = txn_count / max(window_duration_hours, 1)
+                    velocity_score[str(account)] += txn_rate
                     break
 
-    return high_vel
+    return {
+        "high_vel_accounts": high_vel,
+        "velocity_score": dict(velocity_score)
+    }
 
 
 # ===========================================================================
@@ -427,39 +586,50 @@ def get_merchant_accounts(df: pd.DataFrame) -> set[str]:
 
 def compute_scores(
     all_accounts: set[str],
-    cycle_accounts: set[str],
-    fan_in_out_accounts: set[str],
-    shell_accounts: set[str],
-    high_vel_accounts: set[str],
+    cycle_score: dict[str, float],
+    fan_score: dict[str, float],
+    shell_score: dict[str, float],
+    velocity_score: dict[str, float],
     merchants: set[str],
 ) -> dict[str, float]:
     """
-    Suspicion score formula (additive, capped at 100):
-      • In a cycle:            +40
-      • Fan-in / fan-out node: +30
-      • Shell network node:    +20
-      • High velocity:         +10
+    Suspicion score using weighted combination of behavioral severity scores:
+
+      score = w1 * cycle_score[node]
+             + w2 * fan_score[node]
+             + w3 * shell_score[node]
+             + w4 * velocity_score[node]
+
+    where:
+      w1 = 0.5  (cycle risk weight)
+      w2 = 0.2  (fan intensity weight)
+      w3 = 0.2  (shell efficiency weight)
+      w4 = 0.1  (velocity rate weight)
+
+    Final score is capped at 100.
 
     Merchants (>50 txns) are skipped entirely and receive score 0.
 
     Time complexity: O(V) where V = number of unique accounts.
     """
+    w1, w2, w3, w4 = 0.5, 0.2, 0.2, 0.1
+
     scores: dict[str, float] = {}
     for acct in all_accounts:
         if acct in merchants:
             continue  # skip merchants
-        score = 0.0
-        if acct in cycle_accounts:
-            score += 40
-        if acct in fan_in_out_accounts:
-            score += 30
-        if acct in shell_accounts:
-            score += 20
-        if acct in high_vel_accounts:
-            score += 10
+
+        c_score = cycle_score.get(str(acct), 0.0)
+        f_score = fan_score.get(str(acct), 0.0)
+        s_score = shell_score.get(str(acct), 0.0)
+        v_score = velocity_score.get(str(acct), 0.0)
+
+        score = w1 * c_score + w2 * f_score + w3 * s_score + w4 * v_score
         score = min(score, 100)
+
         if score > 0:
             scores[acct] = score
+
     return scores
 
 
@@ -485,12 +655,19 @@ def run_analysis(df: pd.DataFrame) -> dict:
     G = build_graph(df)
     all_accounts = set(G.nodes())
 
-    # --- Detection ---
-    cycles = detect_cycles(G)
+    # --- Detection (now returns risk scores along with nodes) ---
+    cycles, cycle_score = detect_cycles(G)
     smurfing = detect_smurfing(df)
-    shell_nodes = detect_shell_networks(G)
-    high_vel = detect_high_velocity(df)
+    shell_result = detect_shell_networks(G, df)
+    high_vel_result = detect_high_velocity(df)
     merchants = get_merchant_accounts(df)
+
+    # Extract components
+    shell_nodes = shell_result["shell_nodes"]
+    shell_score = shell_result["shell_score"]
+    high_vel = high_vel_result["high_vel_accounts"]
+    velocity_score = high_vel_result["velocity_score"]
+    fan_score = smurfing["fan_score"]
 
     # Flatten cycle accounts and build ring mappings + INVERTED INDEX
     cycle_accounts: set[str] = set()
@@ -520,10 +697,9 @@ def run_analysis(df: pd.DataFrame) -> dict:
 
     fan_in_out_accounts = smurfing["fan_in_nodes"] | smurfing["fan_out_nodes"]
 
-    # --- Scoring ---
+    # --- Scoring (now with continuous risk scores) ---
     scores = compute_scores(
-        all_accounts, cycle_accounts, fan_in_out_accounts,
-        shell_nodes, high_vel, merchants,
+        all_accounts, cycle_score, fan_score, shell_score, velocity_score, merchants,
     )
 
     # --- Update ring risk scores (average member score) ---
