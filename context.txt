@@ -1,0 +1,265 @@
+================================================================================
+RIFT 2026 HACKATHON — PS1 MONEY MULING DETECTION
+PROJECT CONTEXT FILE (Use this as system context when prompting Claude)
+================================================================================
+
+PROJECT NAME: FinForensics — Money Muling Detection Engine
+HACKATHON: RIFT 2026
+TRACK: Graph Theory / Financial Crime Detection
+TEAM SIZE: 2 members (non-technical)
+TIME CONSTRAINT: One night build
+
+--------------------------------------------------------------------------------
+PROBLEM STATEMENT SUMMARY
+--------------------------------------------------------------------------------
+Build a web-based Financial Forensics Engine that:
+- Accepts CSV file uploads with transaction data
+- Detects money muling networks using graph analysis
+- Visualizes fraud rings interactively
+- Outputs a structured JSON report
+
+Money muling = criminals use networks of individuals ("mules") to transfer
+illicit funds through multiple accounts to obscure origin.
+
+--------------------------------------------------------------------------------
+INPUT CSV FORMAT (EXACT)
+--------------------------------------------------------------------------------
+Columns:
+- transaction_id (String)
+- sender_id (String)
+- receiver_id (String)
+- amount (Float)
+- timestamp (DateTime, format: YYYY-MM-DD HH:MM:SS)
+
+--------------------------------------------------------------------------------
+REQUIRED OUTPUT JSON FORMAT (EXACT — judges test line by line)
+--------------------------------------------------------------------------------
+{
+  "suspicious_accounts": [
+    {
+      "account_id": "ACC_00123",
+      "suspicion_score": 87.5,
+      "detected_patterns": ["cycle_length_3", "high_velocity"],
+      "ring_id": "RING_001"
+    }
+  ],
+  "fraud_rings": [
+    {
+      "ring_id": "RING_001",
+      "member_accounts": ["ACC_00123"],
+      "pattern_type": "cycle",
+      "risk_score": 95.3
+    }
+  ],
+  "summary": {
+    "total_accounts_analyzed": 500,
+    "suspicious_accounts_flagged": 15,
+    "fraud_rings_detected": 4,
+    "processing_time_seconds": 2.3
+  }
+}
+
+Rules:
+- suspicious_accounts sorted by suspicion_score DESCENDING
+- suspicion_score is Float between 0-100
+- ring_id format: RING_001, RING_002, RING_003...
+- detected_patterns values: "cycle_length_3", "cycle_length_4", "cycle_length_5",
+  "fan_in", "fan_out", "shell_network", "high_velocity"
+
+--------------------------------------------------------------------------------
+THREE DETECTION ALGORITHMS REQUIRED
+--------------------------------------------------------------------------------
+
+1. CYCLE DETECTION (Circular Fund Routing)
+   - Detect simple cycles of length 3, 4, and 5 in directed graph
+   - Algorithm: DFS-based simple cycle detection
+   - Time Complexity: O(V + E)
+   - Each cycle = one fraud ring
+   - Pattern labels: "cycle_length_3", "cycle_length_4", "cycle_length_5"
+
+2. SMURFING DETECTION (Fan-in / Fan-out)
+   - Fan-in: 10+ unique senders → 1 receiver within 72-hour window
+   - Fan-out: 1 sender → 10+ unique receivers within 72-hour window
+   - Use pandas for timestamp filtering
+   - Time Complexity: O(E)
+   - Pattern labels: "fan_in", "fan_out"
+
+3. SHELL NETWORK DETECTION (Layered Shell Networks)
+   - Chains of 3+ hops
+   - Intermediate accounts have only 2-3 total transactions
+   - Algorithm: BFS traversal checking node degree
+   - Time Complexity: O(V + E)
+   - Pattern label: "shell_network"
+
+--------------------------------------------------------------------------------
+SUSPICION SCORE FORMULA (0-100, capped at 100)
+--------------------------------------------------------------------------------
+- Node is in a detected cycle:        +40 points
+- Node is fan-in or fan-out:          +30 points
+- Node is in shell network:           +20 points
+- High velocity (>10 txns in 24hrs):  +10 points
+
+FALSE POSITIVE PROTECTION (CRITICAL):
+- If node has >50 total transactions → mark as "legitimate_merchant" → DO NOT flag
+- This prevents payroll accounts and merchants from being flagged
+
+--------------------------------------------------------------------------------
+TECH STACK
+--------------------------------------------------------------------------------
+Backend:
+- Language: Python 3.10+
+- Framework: Flask
+- Graph Library: NetworkX
+- Data Processing: pandas
+- CORS: flask-cors
+
+Frontend:
+- Framework: React (Vite)
+- Graph Visualization: Cytoscape.js
+- Styling: Tailwind CSS
+- HTTP Client: Axios
+- CSV Parsing: PapaParse
+
+Deployment:
+- Backend: Render.com (free tier)
+- Frontend: Vercel (free tier)
+- Keep-alive: UptimeRobot (free) — pings /ping every 5 min to prevent cold start
+
+--------------------------------------------------------------------------------
+BACKEND API ENDPOINTS
+--------------------------------------------------------------------------------
+POST /upload
+- Accepts: multipart/form-data with CSV file
+- Returns: JSON analysis result (exact format above)
+- Max processing time: 30 seconds for 10K rows
+
+GET /ping
+- Returns: {"status": "alive"}
+- Purpose: UptimeRobot keep-alive
+
+GET /download-json
+- Returns: Last analysis result as downloadable fraud_report.json
+
+CORS: Enabled for all origins (*)
+
+--------------------------------------------------------------------------------
+FRONTEND UI REQUIREMENTS
+--------------------------------------------------------------------------------
+1. Upload Section
+   - Drag and drop CSV upload
+   - "Analyze" button
+   - Loading spinner during processing
+
+2. Graph Visualization (Cytoscape.js)
+   - Nodes = accounts, directed edges = transactions
+   - Suspicious nodes: RED, larger size
+   - Normal nodes: BLUE
+   - Fraud ring nodes: ORANGE with thick border
+   - Click node → show account_id, suspicion_score, detected_patterns
+   - Legend for colors
+
+3. Fraud Ring Summary Table
+   - Columns: Ring ID | Pattern Type | Member Count | Risk Score | Member Accounts
+   - Sorted by Risk Score descending
+   - Red highlight for risk_score > 80
+
+4. Summary Stats Bar
+   - Total accounts analyzed
+   - Suspicious accounts flagged
+   - Fraud rings detected
+   - Processing time
+
+5. Download Button
+   - "Download JSON Report" → saves fraud_report.json
+
+Style: Dark theme, professional fintech look, green/red color scheme
+
+--------------------------------------------------------------------------------
+PERFORMANCE REQUIREMENTS
+--------------------------------------------------------------------------------
+- Processing time: ≤ 30 seconds for up to 10,000 transactions
+- Precision target: ≥ 70% (minimize false positives)
+- Recall target: ≥ 60% (catch most fraud rings)
+- Must NOT flag legitimate high-volume merchants or payroll accounts
+
+--------------------------------------------------------------------------------
+GITHUB REPO STRUCTURE
+--------------------------------------------------------------------------------
+/
+├── backend/
+│   ├── app.py
+│   ├── graph_engine.py
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── components/
+│   │   └── main.jsx
+│   ├── package.json
+│   └── vite.config.js
+├── sample_data/
+│   └── test_transactions.csv
+├── README.md
+└── .gitignore
+
+--------------------------------------------------------------------------------
+README.md REQUIRED SECTIONS
+--------------------------------------------------------------------------------
+- Project title + badges
+- Live Demo URL
+- LinkedIn Video URL
+- Problem statement summary
+- Tech Stack table
+- System Architecture diagram (text-based)
+- Algorithm Approach with time complexity analysis
+- Suspicion Score Methodology
+- Installation & Setup (local)
+- Usage Instructions
+- Known Limitations
+- Team Members
+
+--------------------------------------------------------------------------------
+LINKEDIN VIDEO REQUIREMENTS
+--------------------------------------------------------------------------------
+- Duration: 2-3 minutes MAX
+- Must be PUBLIC
+- Must tag RIFT official LinkedIn page
+- Hashtags: #RIFTHackathon #MoneyMulingDetection #FinancialCrime
+- Must show: live demo, architecture explanation, algorithm walkthrough
+
+--------------------------------------------------------------------------------
+EVALUATION CRITERIA (in order of importance)
+--------------------------------------------------------------------------------
+1. Solution Accuracy — correct detection, valid JSON, line-by-line test matching
+2. Test Cases — exact match with expected account IDs and ring identification
+3. Technical Depth — graph algorithm quality, complexity analysis
+4. Problem Clarity — clear understanding of money muling
+5. Innovation — novel suspicion scoring, temporal analysis, false positive handling
+6. Documentation — complete README
+7. Presentation — demo video quality
+
+--------------------------------------------------------------------------------
+DISQUALIFICATION TRIGGERS (AVOID THESE)
+--------------------------------------------------------------------------------
+- No live deployed URL
+- App not publicly accessible
+- LinkedIn video not posted or not public
+- GitHub repo private or incomplete
+- JSON output doesn't match required schema
+- Submission after 12:00 PM deadline
+
+--------------------------------------------------------------------------------
+HOW TO USE THIS CONTEXT FILE WITH CLAUDE
+--------------------------------------------------------------------------------
+Start every new Claude conversation with:
+
+"I am building a hackathon project. Here is the full context: [paste this file]
+Now help me with: [your specific request]"
+
+This ensures Claude always has full project context and generates
+code/content that exactly matches the requirements.
+
+================================================================================
+END OF CONTEXT FILE
+================================================================================

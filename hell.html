@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinForensics</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #FAFAF9;
+  --white: #FFFFFF;
+  --text: #1A1A1A;
+  --muted: #6B7280;
+  --light: #F3F4F6;
+  --border: #E5E7EB;
+  --accent: #E63946;
+  --accent2: #1d3557;
+  --green: #2D6A4F;
+  --amber: #B45309;
+  --radius: 16px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.10);
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* NAV */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 0 48px;
+  height: 64px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(250,250,249,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-logo {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+.nav-logo span { color: var(--accent); }
+.nav-pill {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--light);
+  padding: 6px 14px;
+  border-radius: 100px;
+  letter-spacing: 0.3px;
+}
+
+/* HERO */
+.hero {
+  padding: 160px 48px 80px;
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: center;
+}
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  background: rgba(230,57,70,0.08);
+  padding: 6px 16px;
+  border-radius: 100px;
+  margin-bottom: 32px;
+  letter-spacing: 0.5px;
+}
+.hero-badge-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: blink 2s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.hero h1 {
+  font-size: clamp(36px, 5vw, 58px);
+  font-weight: 300;
+  line-height: 1.15;
+  letter-spacing: -1.5px;
+  color: var(--text);
+  margin-bottom: 20px;
+}
+.hero h1 em {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--accent);
+}
+.hero p {
+  font-size: 17px;
+  color: var(--muted);
+  font-weight: 300;
+  max-width: 520px;
+  margin: 0 auto 48px;
+  line-height: 1.7;
+}
+
+/* UPLOAD CARD */
+.upload-card {
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 48px;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+.upload-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  transition: border-color 0.25s;
+}
+.upload-card:hover::before { border-color: var(--accent); }
+.upload-card:hover { box-shadow: var(--shadow-lg), 0 0 0 4px rgba(230,57,70,0.06); }
+
+.upload-icon {
+  width: 64px; height: 64px;
+  background: var(--light);
+  border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 24px;
+  font-size: 28px;
+  transition: transform 0.25s;
+}
+.upload-card:hover .upload-icon { transform: scale(1.05); }
+
+.upload-card h3 {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+.upload-card p {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 32px;
+}
+.upload-card p code {
+  font-size: 12px;
+  background: var(--light);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--text);
+  color: white;
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 13px 28px;
+  border-radius: 100px;
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.2px;
+  transition: all 0.2s;
+}
+.btn-primary:hover {
+  background: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(230,57,70,0.25);
+}
+
+/* MAIN CONTENT */
+.content { max-width: 1100px; margin: 0 auto; padding: 0 48px 80px; }
+
+/* STATS */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 40px;
+}
+.stat {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-bottom: 8px;
+}
+.stat-value {
+  font-size: 32px;
+  font-weight: 300;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+.stat-value.danger { color: var(--accent); }
+.stat-value.warning { color: var(--amber); }
+.stat-value.safe { color: var(--green); }
+.stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+/* SECTION LABEL */
+.section-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+/* GRAPH */
+.graph-panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 32px;
+  overflow: hidden;
+}
+.graph-header {
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.graph-header h3 { font-size: 15px; font-weight: 500; letter-spacing: -0.2px; }
+.legend { display: flex; gap: 20px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.graph-body {
+  height: 380px;
+  background: #FAFAF9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* fake animated graph nodes */
+.fake-graph { position: absolute; inset: 0; }
+.gnode {
+  position: absolute;
+  border-radius: 50%;
+  transition: all 0.3s;
+}
+.gnode.n { width: 10px; height: 10px; background: #D1D5DB; }
+.gnode.s { width: 16px; height: 16px; background: rgba(230,57,70,0.15); border: 2px solid var(--accent); animation: gpulse 3s infinite; }
+.gnode.r { width: 13px; height: 13px; background: rgba(29,53,87,0.15); border: 2px solid var(--accent2); }
+@keyframes gpulse { 0%,100%{box-shadow:0 0 0 0 rgba(230,57,70,0.2)} 50%{box-shadow:0 0 0 8px rgba(230,57,70,0)} }
+
+.graph-empty {
+  text-align: center;
+  color: var(--muted);
+}
+.graph-empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.3; }
+.graph-empty p { font-size: 14px; }
+
+/* TABLE */
+.table-panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-bottom: 32px;
+}
+.table-header {
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.table-header h3 { font-size: 15px; font-weight: 500; }
+.count-badge {
+  font-size: 12px;
+  background: var(--light);
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 100px;
+}
+table { width: 100%; border-collapse: collapse; }
+th {
+  padding: 12px 28px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.3px;
+}
+td {
+  padding: 16px 28px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background 0.15s; }
+tbody tr:hover td { background: var(--bg); }
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 100px;
+  margin: 2px 2px;
+}
+.tag.cycle { background: rgba(29,53,87,0.08); color: var(--accent2); }
+.tag.fan { background: rgba(180,83,9,0.08); color: var(--amber); }
+.tag.shell { background: rgba(230,57,70,0.08); color: var(--accent); }
+.tag.vel { background: rgba(45,106,79,0.08); color: var(--green); }
+
+.risk-score { font-weight: 500; }
+.risk-score.high { color: var(--accent); }
+.risk-score.med { color: var(--amber); }
+.risk-score.low { color: var(--green); }
+
+.ring-id {
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--muted);
+  background: var(--light);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+/* DOWNLOAD */
+.download-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 40px;
+}
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 13px 28px;
+  border-radius: 100px;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-outline:hover {
+  border-color: var(--text);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+/* FOOTER */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 24px 48px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* DIVIDER */
+.divider { height: 1px; background: var(--border); margin: 40px 0; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Fin<span>Forensics</span></div>
+  <div class="nav-pill">Graph Analysis Engine</div>
+</nav>
+
+<!-- HERO + UPLOAD -->
+<section class="hero">
+  <div class="hero-badge">
+    <div class="hero-badge-dot"></div>
+    RIFT 2026 · Financial Crime Detection
+  </div>
+  <h1>Detect <em>money muling</em><br>before it disappears</h1>
+  <p>Upload a transaction CSV and our graph engine surfaces fraud rings, smurfing patterns, and shell networks in seconds.</p>
+
+  <div class="upload-card">
+    <div class="upload-icon">📂</div>
+    <h3>Drop your transaction file</h3>
+    <p>Supports CSV with <code>sender_id</code>, <code>receiver_id</code>, <code>amount</code>, <code>timestamp</code></p>
+    <button class="btn-primary">
+      <span>→</span> Analyze Transactions
+    </button>
+  </div>
+</section>
+
+<!-- RESULTS -->
+<div class="content">
+
+  <!-- STATS -->
+  <div class="section-label">Analysis Summary</div>
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-label">Accounts analyzed</div>
+      <div class="stat-value safe">4,821</div>
+      <div class="stat-sub">from uploaded CSV</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Suspicious flagged</div>
+      <div class="stat-value danger">127</div>
+      <div class="stat-sub">2.6% of total</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Fraud rings found</div>
+      <div class="stat-value warning">14</div>
+      <div class="stat-sub">cycles + smurfing</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Processing time</div>
+      <div class="stat-value">2.3s</div>
+      <div class="stat-sub">for 10K transactions</div>
+    </div>
+  </div>
+
+  <!-- GRAPH -->
+  <div class="section-label">Transaction Network</div>
+  <div class="graph-panel">
+    <div class="graph-header">
+      <h3>Network Graph</h3>
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#D1D5DB"></div> Normal
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--accent)"></div> Suspicious
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--accent2)"></div> Fraud Ring
+        </div>
+      </div>
+    </div>
+    <div class="graph-body">
+      <!-- fake nodes for preview -->
+      <div class="fake-graph">
+        <div class="gnode n" style="top:18%;left:12%"></div>
+        <div class="gnode n" style="top:65%;left:8%"></div>
+        <div class="gnode n" style="top:42%;left:22%"></div>
+        <div class="gnode n" style="top:30%;left:38%"></div>
+        <div class="gnode n" style="top:78%;left:28%"></div>
+        <div class="gnode s" style="top:22%;left:52%"></div>
+        <div class="gnode s" style="top:58%;left:48%"></div>
+        <div class="gnode s" style="top:72%;left:62%"></div>
+        <div class="gnode r" style="top:35%;left:68%"></div>
+        <div class="gnode r" style="top:20%;left:78%"></div>
+        <div class="gnode r" style="top:50%;left(82%"></div>
+        <div class="gnode n" style="top:82%;left:80%"></div>
+        <div class="gnode n" style="top:10%;left:70%"></div>
+      </div>
+      <div class="graph-empty">
+        <div class="graph-empty-icon">◎</div>
+        <p>Graph renders here after upload</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- RING TABLE -->
+  <div class="section-label">Fraud Rings</div>
+  <div class="table-panel">
+    <div class="table-header">
+      <h3>Detected Rings</h3>
+      <span class="count-badge">14 rings</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Ring ID</th>
+          <th>Pattern</th>
+          <th>Members</th>
+          <th>Risk Score</th>
+          <th>Accounts</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="ring-id">RING_001</span></td>
+          <td><span class="tag cycle">cycle · length 3</span></td>
+          <td>3</td>
+          <td><span class="risk-score high">95.3</span></td>
+          <td style="color:var(--muted);font-size:13px;">ACC_001, ACC_002, ACC_003</td>
+        </tr>
+        <tr>
+          <td><span class="ring-id">RING_002</span></td>
+          <td><span class="tag fan">fan out</span></td>
+          <td>13</td>
+          <td><span class="risk-score med">72.1</span></td>
+          <td style="color:var(--muted);font-size:13px;">ACC_020, ACC_045 +11 more</td>
+        </tr>
+        <tr>
+          <td><span class="ring-id">RING_003</span></td>
+          <td><span class="tag shell">shell network</span></td>
+          <td>4</td>
+          <td><span class="risk-score med">60.0</span></td>
+          <td style="color:var(--muted);font-size:13px;">ACC_030, ACC_031, ACC_032, ACC_033</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ACCOUNTS TABLE -->
+  <div class="section-label">Flagged Accounts</div>
+  <div class="table-panel">
+    <div class="table-header">
+      <h3>Suspicious Accounts</h3>
+      <span class="count-badge">127 accounts</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Account ID</th>
+          <th>Score</th>
+          <th>Patterns</th>
+          <th>Ring</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:500">ACC_00123</td>
+          <td><span class="risk-score high">87.5</span></td>
+          <td>
+            <span class="tag cycle">cycle_length_3</span>
+            <span class="tag vel">high_velocity</span>
+          </td>
+          <td><span class="ring-id">RING_001</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:500">ACC_00456</td>
+          <td><span class="risk-score med">70.0</span></td>
+          <td><span class="tag fan">fan_out</span></td>
+          <td><span class="ring-id">RING_002</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:500">ACC_00789</td>
+          <td><span class="risk-score low">40.0</span></td>
+          <td><span class="tag shell">shell_network</span></td>
+          <td><span class="ring-id">RING_003</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- DOWNLOAD -->
+  <div class="download-row">
+    <button class="btn-outline">
+      ↓ &nbsp; Download fraud_report.json
+    </button>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  FinForensics · RIFT 2026 Hackathon · Graph Theory Track
+</footer>
+
+</body>
+</html>
