@@ -1,7 +1,6 @@
-flask>=3.0.0
-flask-cors>=4.0.0
-pandas>=2.1.0
-networkx>=3.2
-werkzeug>=3.0.0
+flask
+flask-cors
+pandas
+networkx
 numpy
 gunicorn
