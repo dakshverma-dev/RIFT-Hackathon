@@ -8,7 +8,7 @@ import GraphView from "./components/GraphView";
 import RingsTable from "./components/RingsTable";
 import AccountsTable from "./components/AccountsTable";
 
-const API_BASE = "http://127.0.0.1:5000"; // TODO: replace with your Render URL
+const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 export default function App() {
   const [file, setFile] = useState(null);
