@@ -41,7 +41,7 @@ import numpy as np
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
 CORS(app, origins=[
-    "https://rift-hackathon-eta.vercel.app/",
+    "web-production-cc633.up.railway.app",
     "http://localhost:5173"
 ])
 # In-memory store for the last analysis result
