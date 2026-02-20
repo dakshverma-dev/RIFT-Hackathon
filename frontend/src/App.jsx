@@ -9,16 +9,7 @@ import RingsTable from "./components/RingsTable";
 import AccountsTable from "./components/AccountsTable";
 
 const API_BASE = "https://web-production-cc633.up.railway.app";
-```
 
-→ Commit the change
-
-Vercel will auto-redeploy in ~1 min. This bypasses the env variable issue entirely and will confirm if Railway is the problem or not.
-
----
-
-Also open this in your browser right now and tell me what you see:
-```
 
 
 export default function App() {
