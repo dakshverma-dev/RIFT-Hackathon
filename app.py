@@ -40,8 +40,10 @@ import numpy as np
 # Flask application setup
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all origins
-
+CORS(app, origins=[
+    "https://rift-hackathon-eta.vercel.app/",
+    "http://localhost:5173"
+])
 # In-memory store for the last analysis result
 _last_result = None
 
